@@ -107,17 +107,19 @@ composer.addEventListener("submit", async (e) => {
   }
 });
 
-// Build input array for Responses API (system prompt goes in top-level `instructions`)
+// Build input array for Responses API (each item needs type: "message")
 function buildInput(msgs) {
   const arr = [];
   for (const m of msgs) {
     if (m.role === "user") {
       arr.push({
+        type: "message",
         role: "user",
         content: [{ type: "input_text", text: m.content }]
       });
     } else if (m.role === "assistant") {
       arr.push({
+        type: "message",
         role: "assistant",
         content: [{ type: "output_text", text: m.content }]
       });
@@ -176,8 +178,14 @@ async function callFoundry(settings, msgs) {
   try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
   if (!res.ok) {
-    const msg = (data.error && (data.error.message || data.error.code)) || text || res.statusText;
-    throw new Error(`${res.status} ${msg}`);
+    let detail = "";
+    if (data && data.error) {
+      detail = data.error.message || data.error.code || JSON.stringify(data.error);
+    } else {
+      detail = text || res.statusText;
+    }
+    console.error("Foundry error response:", data);
+    throw new Error(`${res.status} ${detail}`);
   }
   return extractText(data);
 }

@@ -1,34 +1,27 @@
-const STORAGE_KEY = "foundry-chat-settings";
-const DEFAULTS = {
-  endpoint: "",
-  model: "",
-  apikey: "",
-  system: ""
-};
+const SETTINGS_KEY = "foundry-chat-settings";
+const CONVS_KEY = "foundry-chat-conversations";
+const ACTIVE_KEY = "foundry-chat-active-id";
+const DEFAULTS = { endpoint: "", model: "", apikey: "", system: "" };
 
 const $ = (id) => document.getElementById(id);
 const chatEl = $("chat");
 const inputEl = $("input");
 const composer = $("composer");
 const sendBtn = $("send-btn");
-const clearBtn = $("clear-btn");
+const titleEl = $("conversation-title");
+const convsEl = $("conversations");
+const newChatBtn = $("new-chat-btn");
 const settingsBtn = $("settings-btn");
 const settingsDialog = $("settings-dialog");
 const cancelBtn = $("cancel-btn");
+const sidebarToggle = $("sidebar-toggle");
 
-let messages = []; // {role, content}
-
+// ---------- Settings ----------
 function loadSettings() {
-  try {
-    const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    return { ...DEFAULTS, ...s };
-  } catch {
-    return { ...DEFAULTS };
-  }
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; }
+  catch { return { ...DEFAULTS }; }
 }
-function saveSettings(s) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-}
+function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
 
 function openSettings() {
   const s = loadSettings();
@@ -41,9 +34,7 @@ function openSettings() {
 
 settingsBtn.addEventListener("click", openSettings);
 cancelBtn.addEventListener("click", () => settingsDialog.close());
-
-$("settings-form").addEventListener("submit", (e) => {
-  // dialog form auto-closes; save before close
+$("settings-form").addEventListener("submit", () => {
   saveSettings({
     endpoint: $("endpoint").value.trim(),
     model: $("model").value.trim(),
@@ -52,7 +43,158 @@ $("settings-form").addEventListener("submit", (e) => {
   });
 });
 
-function addMessage(role, content, opts = {}) {
+// ---------- Conversations ----------
+// shape: [{ id, title, messages: [{role, content}], createdAt, updatedAt }]
+function loadConvs() {
+  try { return JSON.parse(localStorage.getItem(CONVS_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveConvs(list) { localStorage.setItem(CONVS_KEY, JSON.stringify(list)); }
+function getActiveId() { return localStorage.getItem(ACTIVE_KEY) || null; }
+function setActiveId(id) {
+  if (id) localStorage.setItem(ACTIVE_KEY, id);
+  else localStorage.removeItem(ACTIVE_KEY);
+}
+
+function newId() {
+  return "c_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+}
+
+function getActiveConv() {
+  const list = loadConvs();
+  const id = getActiveId();
+  return list.find(c => c.id === id) || null;
+}
+
+function upsertConv(conv) {
+  const list = loadConvs();
+  const idx = list.findIndex(c => c.id === conv.id);
+  if (idx >= 0) list[idx] = conv;
+  else list.unshift(conv);
+  saveConvs(list);
+}
+
+function deleteConv(id) {
+  const list = loadConvs().filter(c => c.id !== id);
+  saveConvs(list);
+  if (getActiveId() === id) {
+    if (list.length) selectConv(list[0].id);
+    else newConversation();
+  } else {
+    renderSidebar();
+  }
+}
+
+function renameConv(id, newTitle) {
+  const list = loadConvs();
+  const c = list.find(x => x.id === id);
+  if (c) {
+    c.title = newTitle.trim() || c.title;
+    c.updatedAt = Date.now();
+    saveConvs(list);
+    renderSidebar();
+    if (getActiveId() === id) titleEl.textContent = c.title;
+  }
+}
+
+function newConversation() {
+  const conv = {
+    id: newId(),
+    title: "New chat",
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  upsertConv(conv);
+  setActiveId(conv.id);
+  renderSidebar();
+  renderChat();
+}
+
+function selectConv(id) {
+  setActiveId(id);
+  renderSidebar();
+  renderChat();
+}
+
+newChatBtn.addEventListener("click", newConversation);
+
+// ---------- Rendering ----------
+function renderSidebar() {
+  const list = loadConvs().sort((a, b) => b.updatedAt - a.updatedAt);
+  const activeId = getActiveId();
+  convsEl.innerHTML = "";
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.style.cssText = "padding:12px;color:#86868b;font-size:13px;";
+    empty.textContent = "No conversations yet.";
+    convsEl.appendChild(empty);
+    return;
+  }
+  for (const c of list) {
+    const item = document.createElement("div");
+    item.className = "conv-item" + (c.id === activeId ? " active" : "");
+    item.addEventListener("click", (e) => {
+      if (e.target.closest(".conv-actions")) return;
+      selectConv(c.id);
+    });
+
+    const title = document.createElement("span");
+    title.className = "conv-title";
+    title.textContent = c.title;
+    item.appendChild(title);
+
+    const actions = document.createElement("div");
+    actions.className = "conv-actions";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.title = "Rename";
+    renameBtn.textContent = "✎";
+    renameBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const next = prompt("Rename conversation:", c.title);
+      if (next !== null) renameConv(c.id, next);
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.title = "Delete";
+    delBtn.textContent = "🗑";
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (confirm(`Delete "${c.title}"?`)) deleteConv(c.id);
+    });
+
+    actions.appendChild(renameBtn);
+    actions.appendChild(delBtn);
+    item.appendChild(actions);
+    convsEl.appendChild(item);
+  }
+}
+
+function renderChat() {
+  chatEl.innerHTML = "";
+  const conv = getActiveConv();
+  if (!conv) {
+    titleEl.textContent = "New chat";
+    return;
+  }
+  titleEl.textContent = conv.title;
+  if (!conv.messages.length) {
+    const div = document.createElement("div");
+    div.className = "empty-state";
+    div.innerHTML = "<h2>Start a new conversation</h2><p>Type a message below.</p>";
+    chatEl.appendChild(div);
+    return;
+  }
+  for (const m of conv.messages) {
+    addMessageToDOM(m.role, m.content);
+  }
+}
+
+function addMessageToDOM(role, content, opts = {}) {
+  // remove empty-state if present
+  const empty = chatEl.querySelector(".empty-state");
+  if (empty) empty.remove();
   const div = document.createElement("div");
   div.className = "msg " + role;
   if (opts.typing) div.classList.add("typing");
@@ -62,11 +204,7 @@ function addMessage(role, content, opts = {}) {
   return div;
 }
 
-clearBtn.addEventListener("click", () => {
-  messages = [];
-  chatEl.innerHTML = "";
-});
-
+// ---------- Sending ----------
 inputEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -81,33 +219,52 @@ composer.addEventListener("submit", async (e) => {
 
   const settings = loadSettings();
   if (!settings.endpoint || !settings.model || !settings.apikey) {
-    addMessage("error", "Please configure endpoint, model, and API key in settings (⚙️).");
+    addMessageToDOM("error", "Please configure endpoint, model, and API key in Settings.");
     openSettings();
     return;
   }
 
+  // Ensure an active conversation exists
+  let conv = getActiveConv();
+  if (!conv) {
+    newConversation();
+    conv = getActiveConv();
+  }
+
   inputEl.value = "";
-  addMessage("user", text);
-  messages.push({ role: "user", content: text });
+  addMessageToDOM("user", text);
+  conv.messages.push({ role: "user", content: text });
+
+  // Auto-title from first user message
+  if (conv.messages.length === 1) {
+    conv.title = text.slice(0, 40) + (text.length > 40 ? "…" : "");
+    titleEl.textContent = conv.title;
+  }
+  conv.updatedAt = Date.now();
+  upsertConv(conv);
+  renderSidebar();
 
   sendBtn.disabled = true;
-  const typingEl = addMessage("assistant", "Thinking…", { typing: true });
+  const typingEl = addMessageToDOM("assistant", "Thinking…", { typing: true });
 
   try {
-    const reply = await callFoundry(settings, messages);
+    const reply = await callFoundry(settings, conv.messages);
     typingEl.classList.remove("typing");
     typingEl.textContent = reply;
-    messages.push({ role: "assistant", content: reply });
+    conv.messages.push({ role: "assistant", content: reply });
+    conv.updatedAt = Date.now();
+    upsertConv(conv);
+    renderSidebar();
   } catch (err) {
     typingEl.remove();
-    addMessage("error", "Error: " + (err.message || err));
+    addMessageToDOM("error", "Error: " + (err.message || err));
   } finally {
     sendBtn.disabled = false;
     inputEl.focus();
   }
 });
 
-// Build input array for Responses API (each item needs type: "message")
+// ---------- Foundry API ----------
 function buildInput(msgs) {
   const arr = [];
   for (const m of msgs) {
@@ -129,10 +286,7 @@ function buildInput(msgs) {
 }
 
 function extractText(data) {
-  // Standard OpenAI Responses API: output_text convenience field or output[].content[].text
-  if (typeof data.output_text === "string" && data.output_text.length) {
-    return data.output_text;
-  }
+  if (typeof data.output_text === "string" && data.output_text.length) return data.output_text;
   if (Array.isArray(data.output)) {
     const parts = [];
     for (const item of data.output) {
@@ -145,7 +299,6 @@ function extractText(data) {
     }
     if (parts.length) return parts.join("\n");
   }
-  // Fallback to chat-completions-style
   if (data.choices && data.choices[0]) {
     const c = data.choices[0];
     if (c.message && c.message.content) return c.message.content;
@@ -155,13 +308,8 @@ function extractText(data) {
 }
 
 async function callFoundry(settings, msgs) {
-  const body = {
-    model: settings.model,
-    input: buildInput(msgs)
-  };
-  if (settings.system && settings.system.trim()) {
-    body.instructions = settings.system;
-  }
+  const body = { model: settings.model, input: buildInput(msgs) };
+  if (settings.system && settings.system.trim()) body.instructions = settings.system;
 
   const res = await fetch(settings.endpoint, {
     method: "POST",
@@ -179,21 +327,42 @@ async function callFoundry(settings, msgs) {
 
   if (!res.ok) {
     let detail = "";
-    if (data && data.error) {
-      detail = data.error.message || data.error.code || JSON.stringify(data.error);
-    } else {
-      detail = text || res.statusText;
-    }
+    if (data && data.error) detail = data.error.message || data.error.code || JSON.stringify(data.error);
+    else detail = text || res.statusText;
     console.error("Foundry error response:", data);
     throw new Error(`${res.status} ${detail}`);
   }
   return extractText(data);
 }
 
-// Open settings automatically on first run
+// ---------- Sidebar toggle ----------
+sidebarToggle.addEventListener("click", () => document.body.classList.remove("sidebar-collapsed"));
+// (We don't add a collapse button in the sidebar itself for simplicity, but the toggle re-opens it
+// if collapsed via CSS class. Future: add collapse on small screens.)
+
+// ---------- Init ----------
 (function init() {
+  // Migrate / pick active conversation
+  const list = loadConvs();
+  let active = getActiveConv();
+  if (!active) {
+    if (list.length) {
+      setActiveId(list[0].id);
+    } else {
+      newConversation();
+      // newConversation already renders, return.
+      maybePromptSettings();
+      return;
+    }
+  }
+  renderSidebar();
+  renderChat();
+  maybePromptSettings();
+})();
+
+function maybePromptSettings() {
   const s = loadSettings();
   if (!s.endpoint || !s.model || !s.apikey) {
     setTimeout(openSettings, 100);
   }
-})();
+}

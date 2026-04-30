@@ -7,10 +7,17 @@
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <h1>Foundry Chat</h1>
-    <button id="settings-btn" title="Settings">⚙️</button>
-  </header>
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <button id="new-chat-btn">＋ New chat</button>
+    </div>
+    <div id="conversations"></div>
+    <div class="sidebar-footer">
+      <button id="settings-btn">⚙️ Settings</button>
+    </div>
+  </aside>
+
+  <button id="sidebar-toggle" title="Toggle sidebar">☰</button>
 
   <dialog id="settings-dialog">
     <form method="dialog" id="settings-form">
@@ -39,13 +46,18 @@
     </form>
   </dialog>
 
-  <main id="chat"></main>
+  <div id="main">
+    <header>
+      <h1 id="conversation-title">New chat</h1>
+    </header>
 
-  <form id="composer">
-    <textarea id="input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" rows="2" required></textarea>
-    <button type="submit" id="send-btn">Send</button>
-    <button type="button" id="clear-btn" title="Clear conversation">🗑</button>
-  </form>
+    <main id="chat"></main>
+
+    <form id="composer">
+      <textarea id="input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" rows="2" required></textarea>
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
 
   <script src="app.js"></script>
 </body>

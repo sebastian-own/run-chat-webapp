@@ -107,15 +107,9 @@ composer.addEventListener("submit", async (e) => {
   }
 });
 
-// Build input array for Responses API
-function buildInput(systemPrompt, msgs) {
+// Build input array for Responses API (system prompt goes in top-level `instructions`)
+function buildInput(msgs) {
   const arr = [];
-  if (systemPrompt && systemPrompt.trim()) {
-    arr.push({
-      role: "system",
-      content: [{ type: "input_text", text: systemPrompt }]
-    });
-  }
   for (const m of msgs) {
     if (m.role === "user") {
       arr.push({
@@ -161,8 +155,11 @@ function extractText(data) {
 async function callFoundry(settings, msgs) {
   const body = {
     model: settings.model,
-    input: buildInput(settings.system, msgs)
+    input: buildInput(msgs)
   };
+  if (settings.system && settings.system.trim()) {
+    body.instructions = settings.system;
+  }
 
   const res = await fetch(settings.endpoint, {
     method: "POST",

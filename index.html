@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Foundry Chat</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Foundry Chat</h1>
+    <button id="settings-btn" title="Settings">⚙️</button>
+  </header>
+
+  <dialog id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <h2>Settings</h2>
+      <label>
+        Endpoint URL
+        <input type="url" id="endpoint" required />
+      </label>
+      <label>
+        Model / Deployment name
+        <input type="text" id="model" required />
+      </label>
+      <label>
+        API Key
+        <input type="password" id="apikey" required />
+        <small>Stored only in your browser's localStorage.</small>
+      </label>
+      <label>
+        System prompt (optional)
+        <textarea id="system" rows="3" placeholder="You are a helpful assistant."></textarea>
+      </label>
+      <div class="row">
+        <button value="save" id="save-btn">Save</button>
+        <button value="cancel" type="button" id="cancel-btn">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <main id="chat"></main>
+
+  <form id="composer">
+    <textarea id="input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" rows="2" required></textarea>
+    <button type="submit" id="send-btn">Send</button>
+    <button type="button" id="clear-btn" title="Clear conversation">🗑</button>
+  </form>
+
+  <script src="app.js"></script>
+</body>
+</html>

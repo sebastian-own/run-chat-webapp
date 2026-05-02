@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Foundry Chat</title>
-<link rel="stylesheet" href="styles.css?v=4" />
+<link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
   <aside id="sidebar">
@@ -54,11 +54,16 @@
     <main id="chat"></main>
 
     <form id="composer">
-      <textarea id="input" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" rows="2" required></textarea>
-      <button type="submit" id="send-btn">Send</button>
+      <div id="attachments"></div>
+      <div class="composer-row">
+        <button type="button" id="attach-btn" title="Attach image">📎</button>
+        <textarea id="input" placeholder="Type a message... (Enter to send, Shift+Enter for newline. Paste or drag images.)" rows="2"></textarea>
+        <button type="submit" id="send-btn">Send</button>
+      </div>
+      <input type="file" id="file-input" accept="image/*" multiple hidden />
     </form>
   </div>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

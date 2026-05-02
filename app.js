@@ -15,6 +15,14 @@ const settingsBtn = $("settings-btn");
 const settingsDialog = $("settings-dialog");
 const cancelBtn = $("cancel-btn");
 const sidebarToggle = $("sidebar-toggle");
+const attachBtn = $("attach-btn");
+const fileInput = $("file-input");
+const attachmentsEl = $("attachments");
+
+// Pending attachments (data URLs) for the next message
+let pendingImages = [];
+const MAX_IMAGE_DIM = 1568; // resize images larger than this on the longest edge
+const MAX_IMAGES_PER_MESSAGE = 6;
 
 // ---------- Settings ----------
 function loadSettings() {
@@ -182,27 +190,162 @@ function renderChat() {
   if (!conv.messages.length) {
     const div = document.createElement("div");
     div.className = "empty-state";
-    div.innerHTML = "<h2>Start a new conversation</h2><p>Type a message below.</p>";
+    div.innerHTML = "<h2>Start a new conversation</h2><p>Type a message below — you can also attach screenshots.</p>";
     chatEl.appendChild(div);
     return;
   }
   for (const m of conv.messages) {
-    addMessageToDOM(m.role, m.content);
+    addMessageToDOM(m.role, m.content, { images: m.images });
   }
 }
 
 function addMessageToDOM(role, content, opts = {}) {
-  // remove empty-state if present
   const empty = chatEl.querySelector(".empty-state");
   if (empty) empty.remove();
   const div = document.createElement("div");
   div.className = "msg " + role;
   if (opts.typing) div.classList.add("typing");
-  div.textContent = content;
+
+  if (Array.isArray(opts.images) && opts.images.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg-images";
+    for (const url of opts.images) {
+      const img = document.createElement("img");
+      img.src = url;
+      img.addEventListener("click", () => window.open(url, "_blank"));
+      wrap.appendChild(img);
+    }
+    div.appendChild(wrap);
+  }
+
+  const textSpan = document.createElement("div");
+  textSpan.className = "msg-text";
+  textSpan.textContent = content || "";
+  div.appendChild(textSpan);
+
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
   return div;
 }
+
+// ---------- Attachments ----------
+function renderAttachments() {
+  attachmentsEl.innerHTML = "";
+  pendingImages.forEach((url, i) => {
+    const div = document.createElement("div");
+    div.className = "attachment";
+    const img = document.createElement("img");
+    img.src = url;
+    div.appendChild(img);
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "remove";
+    rm.textContent = "×";
+    rm.title = "Remove";
+    rm.addEventListener("click", () => {
+      pendingImages.splice(i, 1);
+      renderAttachments();
+    });
+    div.appendChild(rm);
+    attachmentsEl.appendChild(div);
+  });
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function processImageFile(file) {
+  if (!file.type.startsWith("image/")) return null;
+  const dataUrl = await fileToDataUrl(file);
+  try {
+    const img = await loadImage(dataUrl);
+    const maxDim = Math.max(img.width, img.height);
+    if (maxDim <= MAX_IMAGE_DIM) return dataUrl;
+    const scale = MAX_IMAGE_DIM / maxDim;
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    const mime = file.type === "image/png" ? "image/png" : "image/jpeg";
+    return canvas.toDataURL(mime, 0.9);
+  } catch {
+    return dataUrl;
+  }
+}
+
+async function addFiles(files) {
+  const arr = Array.from(files || []).filter(f => f.type.startsWith("image/"));
+  for (const f of arr) {
+    if (pendingImages.length >= MAX_IMAGES_PER_MESSAGE) {
+      alert(`Max ${MAX_IMAGES_PER_MESSAGE} images per message.`);
+      break;
+    }
+    const url = await processImageFile(f);
+    if (url) pendingImages.push(url);
+  }
+  renderAttachments();
+}
+
+attachBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", (e) => {
+  addFiles(e.target.files);
+  fileInput.value = "";
+});
+
+// Paste from clipboard
+inputEl.addEventListener("paste", (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  const files = [];
+  for (const item of items) {
+    if (item.kind === "file") {
+      const f = item.getAsFile();
+      if (f && f.type.startsWith("image/")) files.push(f);
+    }
+  }
+  if (files.length) {
+    e.preventDefault();
+    addFiles(files);
+  }
+});
+
+// Drag and drop on the whole window
+window.addEventListener("dragover", (e) => {
+  if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) {
+    e.preventDefault();
+    document.body.classList.add("drag-over");
+  }
+});
+window.addEventListener("dragleave", (e) => {
+  if (e.target === document || e.target === document.body) {
+    document.body.classList.remove("drag-over");
+  }
+});
+window.addEventListener("drop", (e) => {
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+    e.preventDefault();
+    document.body.classList.remove("drag-over");
+    addFiles(e.dataTransfer.files);
+  }
+});
 
 // ---------- Sending ----------
 inputEl.addEventListener("keydown", (e) => {
@@ -215,7 +358,7 @@ inputEl.addEventListener("keydown", (e) => {
 composer.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = inputEl.value.trim();
-  if (!text) return;
+  if (!text && !pendingImages.length) return;
 
   const settings = loadSettings();
   if (!settings.endpoint || !settings.model || !settings.apikey) {
@@ -224,24 +367,33 @@ composer.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Ensure an active conversation exists
   let conv = getActiveConv();
   if (!conv) {
     newConversation();
     conv = getActiveConv();
   }
 
+  const images = pendingImages.slice();
+  pendingImages = [];
+  renderAttachments();
   inputEl.value = "";
-  addMessageToDOM("user", text);
-  conv.messages.push({ role: "user", content: text });
 
-  // Auto-title from first user message
+  addMessageToDOM("user", text, { images });
+  conv.messages.push({ role: "user", content: text, images });
+
   if (conv.messages.length === 1) {
-    conv.title = text.slice(0, 40) + (text.length > 40 ? "…" : "");
+    const seed = text || (images.length ? `Image: ${images.length} attached` : "New chat");
+    conv.title = seed.slice(0, 40) + (seed.length > 40 ? "…" : "");
     titleEl.textContent = conv.title;
   }
   conv.updatedAt = Date.now();
-  upsertConv(conv);
+  try {
+    upsertConv(conv);
+  } catch (storageErr) {
+    // localStorage quota likely exceeded due to image data URLs
+    console.warn("Could not persist conversation (storage quota?):", storageErr);
+    addMessageToDOM("error", "Warning: this conversation is too large to save in browser storage. The chat will work for this session but may not persist.");
+  }
   renderSidebar();
 
   sendBtn.disabled = true;
@@ -250,10 +402,10 @@ composer.addEventListener("submit", async (e) => {
   try {
     const reply = await callFoundry(settings, conv.messages);
     typingEl.classList.remove("typing");
-    typingEl.textContent = reply;
+    typingEl.querySelector(".msg-text").textContent = reply;
     conv.messages.push({ role: "assistant", content: reply });
     conv.updatedAt = Date.now();
-    upsertConv(conv);
+    try { upsertConv(conv); } catch (e) { console.warn(e); }
     renderSidebar();
   } catch (err) {
     typingEl.remove();
@@ -269,11 +421,15 @@ function buildInput(msgs) {
   const arr = [];
   for (const m of msgs) {
     if (m.role === "user") {
-      arr.push({
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: m.content }]
-      });
+      const parts = [];
+      if (m.content) parts.push({ type: "input_text", text: m.content });
+      if (Array.isArray(m.images)) {
+        for (const url of m.images) {
+          parts.push({ type: "input_image", image_url: url });
+        }
+      }
+      if (!parts.length) continue;
+      arr.push({ type: "message", role: "user", content: parts });
     } else if (m.role === "assistant") {
       arr.push({
         type: "message",

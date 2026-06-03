@@ -40,3 +40,16 @@ If your Foundry resource doesn't allow browser-origin requests, you'll see a COR
 - Optional system prompt
 - Settings persisted in localStorage
 - Clear conversation, Enter-to-send / Shift+Enter for newline
+- **Remote MCP tool support** — attach an MCP server (e.g. COROS) so the model can read your data
+
+## COROS MCP (training data)
+
+The app can attach the [COROS MCP server](https://coros.com/stories/coros-metrics/c/mcp-testing) to each Foundry Responses API call. Foundry then talks to the MCP server server-side (no browser CORS issues).
+
+In **Settings → COROS MCP server**:
+1. Tick **Enable MCP tool**.
+2. Pick your region (EU / US / CN) — the URL is prefilled.
+3. Leave **Authorization header** blank to let Foundry attempt OAuth, or paste a `Bearer …` token if you already have one.
+4. Save and ask: *"Show me my runs from the past two weeks."*
+
+> ⚠️ COROS authenticates via OAuth. If Foundry can't complete the OAuth handshake on its own, the call will fail. In that case you'll need a small proxy that pre-authenticates and forwards requests, or paste a pre-issued bearer token.

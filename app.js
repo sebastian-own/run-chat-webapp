@@ -1,7 +1,17 @@
 const SETTINGS_KEY = "foundry-chat-settings";
 const CONVS_KEY = "foundry-chat-conversations";
 const ACTIVE_KEY = "foundry-chat-active-id";
-const DEFAULTS = { endpoint: "", model: "", apikey: "", system: "" };
+const DEFAULTS = {
+  endpoint: "",
+  model: "",
+  apikey: "",
+  system: "",
+  mcpEnabled: false,
+  mcpLabel: "coros",
+  mcpUrl: "https://mcpeu.coros.com/mcp",
+  mcpAuth: "",
+  mcpRequireApproval: false
+};
 
 const $ = (id) => document.getElementById(id);
 const chatEl = $("chat");
@@ -37,17 +47,40 @@ function openSettings() {
   $("model").value = s.model;
   $("apikey").value = s.apikey;
   $("system").value = s.system;
+  $("mcp-enabled").checked = !!s.mcpEnabled;
+  $("mcp-label").value = s.mcpLabel || "coros";
+  $("mcp-url").value = s.mcpUrl || "";
+  $("mcp-auth").value = s.mcpAuth || "";
+  $("mcp-approval").checked = !!s.mcpRequireApproval;
+  syncMcpRegionSelect();
   settingsDialog.showModal();
+}
+
+function syncMcpRegionSelect() {
+  const url = $("mcp-url").value.trim();
+  const select = $("mcp-region");
+  const known = Array.from(select.options).map(o => o.value);
+  if (known.includes(url)) select.value = url;
+  else select.value = "custom";
 }
 
 settingsBtn.addEventListener("click", openSettings);
 cancelBtn.addEventListener("click", () => settingsDialog.close());
+$("mcp-region").addEventListener("change", (e) => {
+  if (e.target.value !== "custom") $("mcp-url").value = e.target.value;
+});
+$("mcp-url").addEventListener("input", syncMcpRegionSelect);
 $("settings-form").addEventListener("submit", () => {
   saveSettings({
     endpoint: $("endpoint").value.trim(),
     model: $("model").value.trim(),
     apikey: $("apikey").value,
-    system: $("system").value
+    system: $("system").value,
+    mcpEnabled: $("mcp-enabled").checked,
+    mcpLabel: $("mcp-label").value.trim() || "coros",
+    mcpUrl: $("mcp-url").value.trim(),
+    mcpAuth: $("mcp-auth").value.trim(),
+    mcpRequireApproval: $("mcp-approval").checked
   });
 });
 
@@ -466,6 +499,22 @@ function extractText(data) {
 async function callFoundry(settings, msgs) {
   const body = { model: settings.model, input: buildInput(msgs) };
   if (settings.system && settings.system.trim()) body.instructions = settings.system;
+
+  if (settings.mcpEnabled && settings.mcpUrl) {
+    const mcpTool = {
+      type: "mcp",
+      server_label: settings.mcpLabel || "coros",
+      server_url: settings.mcpUrl,
+      require_approval: settings.mcpRequireApproval ? "always" : "never"
+    };
+    if (settings.mcpAuth) {
+      const v = settings.mcpAuth.trim();
+      mcpTool.headers = {
+        Authorization: /^bearer\s/i.test(v) ? v : `Bearer ${v}`
+      };
+    }
+    body.tools = [mcpTool];
+  }
 
   const res = await fetch(settings.endpoint, {
     method: "POST",

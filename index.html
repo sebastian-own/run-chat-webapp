@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Foundry Chat</title>
-<link rel="stylesheet" href="styles.css?v=5" />
+<link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
   <aside id="sidebar">
@@ -39,6 +39,38 @@
         System prompt (optional)
         <textarea id="system" rows="3" placeholder="You are a helpful assistant."></textarea>
       </label>
+
+      <fieldset class="mcp-fieldset">
+        <legend>COROS MCP server (optional)</legend>
+        <label class="inline">
+          <input type="checkbox" id="mcp-enabled" />
+          Enable MCP tool for this chat
+        </label>
+        <label>
+          Server label
+          <input type="text" id="mcp-label" value="coros" />
+        </label>
+        <label>
+          Server URL
+          <select id="mcp-region">
+            <option value="https://mcpus.coros.com/mcp">North America / Global</option>
+            <option value="https://mcpeu.coros.com/mcp" selected>Europe</option>
+            <option value="https://mcpcn.coros.com/mcp">China</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="url" id="mcp-url" placeholder="https://mcpeu.coros.com/mcp" />
+        </label>
+        <label>
+          Authorization header (optional)
+          <input type="text" id="mcp-auth" placeholder="Bearer eyJ…  (leave blank if Foundry handles OAuth)" />
+          <small>Some MCP servers (incl. COROS) use OAuth. If Foundry can't complete the OAuth flow, this call will fail — you may need a proxy or a pre-issued token here.</small>
+        </label>
+        <label class="inline">
+          <input type="checkbox" id="mcp-approval" />
+          Require approval for tool calls
+        </label>
+      </fieldset>
+
       <div class="row">
         <button value="save" id="save-btn">Save</button>
         <button value="cancel" type="button" id="cancel-btn">Cancel</button>
@@ -64,6 +96,6 @@
     </form>
   </div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

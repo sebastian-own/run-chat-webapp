@@ -478,15 +478,22 @@ function extractText(data) {
   if (typeof data.output_text === "string" && data.output_text.length) return data.output_text;
   if (Array.isArray(data.output)) {
     const parts = [];
+    const toolErrors = [];
     for (const item of data.output) {
       if (item.type === "message" && Array.isArray(item.content)) {
         for (const c of item.content) {
           if (typeof c.text === "string") parts.push(c.text);
           else if (c.text && typeof c.text.value === "string") parts.push(c.text.value);
         }
+      } else if (item && item.error) {
+        // e.g. mcp_list_tools / mcp_call entries with an error field
+        const label = item.type || "tool";
+        const err = typeof item.error === "string" ? item.error : JSON.stringify(item.error);
+        toolErrors.push(`[${label}] ${err}`);
       }
     }
     if (parts.length) return parts.join("\n");
+    if (toolErrors.length) return "Tool call failed:\n" + toolErrors.join("\n");
   }
   if (data.choices && data.choices[0]) {
     const c = data.choices[0];
@@ -494,6 +501,26 @@ function extractText(data) {
     if (c.text) return c.text;
   }
   return JSON.stringify(data, null, 2);
+}
+
+// Walk a Foundry/OpenAI error object and pull out as much detail as possible.
+function describeFoundryError(err) {
+  if (!err) return "";
+  if (typeof err === "string") return err;
+  const bits = [];
+  if (err.code) bits.push(`code=${err.code}`);
+  if (err.type && err.type !== err.code) bits.push(`type=${err.type}`);
+  if (err.param) bits.push(`param=${err.param}`);
+  if (err.message) bits.push(err.message);
+  if (err.inner_error) {
+    const inner = describeFoundryError(err.inner_error);
+    if (inner) bits.push(`inner=(${inner})`);
+  }
+  if (err.innererror) {
+    const inner = describeFoundryError(err.innererror);
+    if (inner) bits.push(`inner=(${inner})`);
+  }
+  return bits.length ? bits.join(" | ") : JSON.stringify(err);
 }
 
 async function callFoundry(settings, msgs) {
@@ -532,8 +559,20 @@ async function callFoundry(settings, msgs) {
 
   if (!res.ok) {
     let detail = "";
-    if (data && data.error) detail = data.error.message || data.error.code || JSON.stringify(data.error);
+    if (data && data.error) detail = describeFoundryError(data.error);
+    else if (data && data.raw) detail = data.raw;
     else detail = text || res.statusText;
+
+    // 424 from the Responses API almost always means a hosted tool call
+    // (e.g. the MCP server) failed. Add a contextual hint so the message
+    // is actionable instead of just "Server returned 424: None".
+    if (res.status === 424 && settings.mcpEnabled) {
+      detail += ` — MCP tool call to ${settings.mcpUrl} failed.` +
+        ` Check that the MCP server is reachable from Foundry, that the` +
+        ` Authorization header is correct, and that any required OAuth` +
+        ` token (e.g. via the bridge) is valid. See /health on the bridge.`;
+    }
+
     console.error("Foundry error response:", data);
     throw new Error(`${res.status} ${detail}`);
   }
